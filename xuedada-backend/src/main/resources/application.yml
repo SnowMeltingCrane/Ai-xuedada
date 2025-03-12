@@ -21,7 +21,7 @@ spring:
   # todo 需替换配置
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://118.178.94.9:3306/my_db
+    url: jdbc:mysql://118.178.94.9:3306/yudada
     username: snow
     password: 820820328Zz
   # Redis 配置
