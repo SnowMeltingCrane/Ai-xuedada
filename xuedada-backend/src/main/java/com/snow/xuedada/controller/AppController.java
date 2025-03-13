@@ -2,10 +2,7 @@ package com.snow.xuedada.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.snow.xuedada.annotation.AuthCheck;
-import com.snow.xuedada.common.BaseResponse;
-import com.snow.xuedada.common.DeleteRequest;
-import com.snow.xuedada.common.ErrorCode;
-import com.snow.xuedada.common.ResultUtils;
+import com.snow.xuedada.common.*;
 import com.snow.xuedada.constant.UserConstant;
 import com.snow.xuedada.exception.BusinessException;
 import com.snow.xuedada.exception.ThrowUtils;
@@ -18,13 +15,16 @@ import com.snow.xuedada.model.entity.User;
 import com.snow.xuedada.model.enums.ReviewStatusEnum;
 import com.snow.xuedada.model.vo.AppVO;
 import com.snow.xuedada.service.AppService;
+import com.snow.xuedada.service.UserAnswerService;
 import com.snow.xuedada.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
+import java.util.Date;
 
 /**
  * 应用接口
@@ -42,6 +42,8 @@ public class AppController {
 
     @Resource
     private UserService userService;
+    @Autowired
+    private UserAnswerService userAnswerService;
 
     // region 增删改查
 
@@ -173,6 +175,7 @@ public class AppController {
         long size = appQueryRequest.getPageSize();
         // 限制爬虫
         ThrowUtils.throwIf(size > 20, ErrorCode.PARAMS_ERROR);
+        appQueryRequest.setReviewStatus(ReviewStatusEnum.PASS.getValue());
         // 查询数据库
         Page<App> appPage = appService.page(new Page<>(current, size),
                 appService.getQueryWrapper(appQueryRequest));
@@ -240,4 +243,42 @@ public class AppController {
     }
 
     // endregion
+
+    /**
+     * 应用审核
+     * @param reviewRequest
+     * @param request
+     * @return
+     */
+    @PostMapping("/review")
+    @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
+    public BaseResponse<Boolean> doAppReview(@RequestBody ReviewRequest reviewRequest, HttpServletRequest request) {
+        ThrowUtils.throwIf(reviewRequest == null, ErrorCode.PARAMS_ERROR);
+        Long id = reviewRequest.getId();
+        Integer reviewStatus = reviewRequest.getReviewStatus();
+        // 校验
+        ReviewStatusEnum reviewStatusEnum = ReviewStatusEnum.getEnumByValue(reviewStatus);
+        if (id == null || reviewStatusEnum == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        // 判断是否存在
+        App oldApp = appService.getById(id);
+        ThrowUtils.throwIf(oldApp == null, ErrorCode.NOT_FOUND_ERROR);
+        // 已是该状态
+        if (oldApp.getReviewStatus().equals(reviewStatus)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "请勿重复审核");
+        }
+        // 更新审核状态
+        User loginUser = userService.getLoginUser(request);
+        App app = new App();
+        app.setId(id);
+        app.setReviewStatus(reviewStatus);
+        app.setReviewerId(loginUser.getId());
+        app.setReviewTime(new Date());
+        app.setReviewMessage(reviewRequest.getReviewMessage());
+        boolean result = appService.updateById(app);
+        ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
+        return ResultUtils.success(true);
+    }
+
 }

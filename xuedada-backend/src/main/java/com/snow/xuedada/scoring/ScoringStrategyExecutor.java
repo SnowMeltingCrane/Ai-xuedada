@@ -1,27 +1,21 @@
 package com.snow.xuedada.scoring;
 
+import com.snow.xuedada.common.ErrorCode;
+import com.snow.xuedada.exception.BusinessException;
 import com.snow.xuedada.model.entity.App;
 import com.snow.xuedada.model.entity.UserAnswer;
-import com.snow.xuedada.model.enums.AppScoringStrategyEnum;
-import com.snow.xuedada.model.enums.AppTypeEnum;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import java.util.List;
 
-/**
- * 评分策略执行器
- */
-
 @Service
-@Deprecated
-public class ScoringStrategyExecuter {
+public class ScoringStrategyExecutor {
 
+    // 策略列表
     @Resource
-    private CustomScoreScoringStrategy customScoreScoringStrategy;
+    private List<ScoringStrategy> scoringStrategyList;
 
-    @Resource
-    private CustomTestScoringStrategy customTestScoringStrategy;
 
     /**
      * 评分
@@ -32,29 +26,19 @@ public class ScoringStrategyExecuter {
      * @throws Exception
      */
     public UserAnswer doScore(List<String> choiceList, App app) throws Exception {
-        AppTypeEnum appTypeEnum = AppTypeEnum.getEnumByValue(app.getAppType());
-        AppScoringStrategyEnum appScoringStrategyEnum = AppScoringStrategyEnum.getEnumByValue(app.getScoringStrategy());
-        if (appTypeEnum == null || appScoringStrategyEnum == null) {
+        Integer appType = app.getAppType();
+        Integer appScoringStrategy = app.getScoringStrategy();
+        if (appType == null || appScoringStrategy == null) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "应用配置有误，未找到匹配的策略");
         }
-        // 根据不同的应用类别和评分策略，选择对应的策略执行
-        switch (appTypeEnum) {
-            case SCORE:
-                switch (appScoringStrategyEnum) {
-                    case CUSTOM:
-                        return customScoreScoringStrategy.doScore(choiceList, app);
-                    case AI:
-                        break;
+        // 根据注解获取策略
+        for (ScoringStrategy strategy : scoringStrategyList) {
+            if (strategy.getClass().isAnnotationPresent(ScoringStrategyConfig.class)) {
+                ScoringStrategyConfig scoringStrategyConfig = strategy.getClass().getAnnotation(ScoringStrategyConfig.class);
+                if (scoringStrategyConfig.appType() == appType && scoringStrategyConfig.scoringStrategy() == appScoringStrategy) {
+                    return strategy.doScore(choiceList, app);
                 }
-                break;
-            case TEST:
-                switch (appScoringStrategyEnum) {
-                    case CUSTOM:
-                        return customTestScoringStrategy.doScore(choiceList, app);
-                    case AI:
-                        break;
-                }
-                break;
+            }
         }
         throw new BusinessException(ErrorCode.SYSTEM_ERROR, "应用配置有误，未找到匹配的策略");
     }
